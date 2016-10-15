@@ -6,19 +6,27 @@ import java.nio.file.{Files, Paths}
 import org.altic.spark.clustering.som.SomTrainerB
 import org.altic.spark.clustering.utils.{LabelVector, IO, SparkReader}
 import org.apache.log4j.PropertyConfigurator
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.linalg
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.mllib.clustering.{GaussianMixtureModel, GaussianMixture, KMeans}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Vector
 
 /**
- * Created by pradyumnad on 3/4/16.
+ * Created by pradyumnad on 3/4/16. Edited by Manikanta
  */
 object SignatureSOM {
   def context(): SparkContext = {
     val prgName = this.getClass.getSimpleName
     println("## LOCAL ##")
-    new SparkContext("local", prgName)
+
+    val sparkConf = new SparkConf().setAppName("SigSpaceImage").setMaster("local[*]").set("spark.executor.memory","10g")
+      .set("spark.driver.memory","5g")
+      .set("spark.driver.maxResultSize","4g")
+    //new SparkContext("local", prgName)
+    new SparkContext(sparkConf)
   }
 
   class Experience(val datasetDir: String, val outputDir: String, val name: String, val nbProtoRow: Int, val nbProtoCol: Int, val nbIter: Int, val ext: String = ".data") {
@@ -58,13 +66,13 @@ object SignatureSOM {
     //        dlen is the number of row of the dataset
 
 
-    val filepath = "C:\\Users\\Manikanta\\Documents\\UMKC Subjects\\DR\\SigSpace Data from Lab\\Generated\\UECFOOD256\\LBP_"
-    val outfilepath = "C:\\Users\\Manikanta\\Documents\\UMKC Subjects\\DR\\samplesignatures"
+    val filepath = "C:\\Users\\Manikanta\\Documents\\UMKC Subjects\\DR\\Manikanta_data\\GeneratedFeatures\\SIFT_"
+    val outfilepath = "C:\\Users\\Manikanta\\Documents\\UMKC Subjects\\DR\\Manikanta_data\\Signatures"
     //    val filepath = "/Users/pradyumnad/Documents/Datasets/MNIST"
     //    val outfilepath = "/Users/pradyumnad/Documents/Generated/MNIST"
 
     val clusters = Array(20, 30, 50)
-    clusters.foreach(K => saveSignatures(sc, globalNbIter, K, filepath, outfilepath))
+      clusters.foreach(K => saveSignatures(sc, globalNbIter, K, filepath, outfilepath))
   }
 
   def saveSignatures(sc: SparkContext, globalNbIter: Int,
@@ -80,8 +88,9 @@ object SignatureSOM {
       // Delete old results
       //      cleanResults(exp)
 
-      SOMSignature(sc, globalNbIter, exp)
-      kmeansSignature(sc, globalNbIter, exp)
+      //SOMSignature(sc, globalNbIter, exp)
+      //kmeansSignature(sc, globalNbIter, exp)
+      EMSignature(sc, globalNbIter, exp)
     }
 
     val end = System.currentTimeMillis()
@@ -97,7 +106,7 @@ object SignatureSOM {
   def SOMSignature(sc: SparkContext, globalNbIter: Int, exp: Experience): Unit = {
     // Read data from fil
     println("\n***** READ : " + exp.name)
-    val datas] = SparkReader.parseSIFT(sc, exp.dataPath).cache()
+    val datas = SparkReader.parseSIFT(sc, exp.dataPath).cache()
 
     /**
      * Calculate the no of clusters based on the no of data rows in a Data set/Class
@@ -150,4 +159,45 @@ object SignatureSOM {
     //    val preds = dataKM.map(p => p.toArray.mkString(" ") + "," + clusters.predict(p))
     //    preds.saveAsTextFile(exp.outDir + "/" + exp.name + ".clustering.kmeans_" + exp.nbTotProto)
   }
+
+  def EMSignature(sc: SparkContext, globalNbIter: Int, exp: Experience): Unit = {
+    // Read data from file
+    println("\n***** READ : " + exp.name)
+    //val datas: RDD[LabelVector] = SparkReader.parseSIFT(sc, exp.dataPath).cache()
+
+    val datas = SparkReader.parseForKMeans(sc, exp.dataPath).cache()
+
+    /**
+      * Calculate the no of clusters based on the no of data rows in a Data set/Class
+      */
+    val K = clusterCount(datas.count(), exp.nbTotProto)
+
+    println(exp.name + " : " + exp.nbTotProto + " = " + K)
+    println("Total data" + datas.count())
+
+    val gmm = new GaussianMixture().setK(K).run(datas)
+    gmm.save(sc,"data/EMModel")
+    val mapClusterIndices =gmm.predict(datas)
+    val x: Array[MultivariateGaussian] = gmm.gaussians
+
+    // output parameters of max-likelihood model
+    for (i <- 0 until gmm.k) {
+      println("weight=%f\nmu=%s\nsigma=\n%s\n" format
+        (gmm.weights(i), gmm.gaussians(i).mu, gmm.gaussians(i).sigma))
+      val clusterCenter = gmm.gaussians(i).mu;
+    }
+    
+    // Save results
+    val sfilename = exp.outDir + "/" + exp.name + ".clustering.em_centers_" + exp.nbTotProto
+
+
+    if (!Files.exists(Paths.get(sfilename))) {
+      mapClusterIndices
+        .map(d => d)
+        .saveAsTextFile(sfilename)
+    }
+  }
+
+
+
 }
