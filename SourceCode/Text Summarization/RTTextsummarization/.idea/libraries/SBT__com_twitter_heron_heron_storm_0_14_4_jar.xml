@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="SBT: com.twitter.heron:heron-storm:0.14.4:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/com.twitter.heron/heron-storm/jars/heron-storm-0.14.4.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/com.twitter.heron/heron-storm/srcs/heron-storm-0.14.4-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
