@@ -1,3 +1,3 @@
-# RealTime-Fall2016-Sports-Video-Annotation-and-Summarization
+# RealTime-Text-Summarization
 
 https://youtu.be/PCWL1x4TniQ
